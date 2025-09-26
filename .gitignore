@@ -1,8 +1,11 @@
-# kxboot-pipa - Build artifacts and downloads
-# Ignore all build artifacts but keep source code and configuration
-
-# Build directory - contains all downloaded, extracted, and built files
+# Build directory
 build/
+
+# Firmwares directory
+firmwares/
+
+# Modules directory
+modules/
 
 # Compiled binaries and archives
 *.o
@@ -45,45 +48,9 @@ Thumbs.db
 .tmp/
 temp/
 
-# Log files
-*.log
-
-# Dependencies and package managers
-node_modules/
-.npm/
-.yarn/
-.pnp/
-
-# Environment files
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Backup files
-*.bak
-*.backup
-
-# Core dumps
-core
-core.*
-
 # Git patches
 *.patch
 *.diff
-
-# Config overrides (allow base configs but ignore local overrides)
-*local.config
-*.local
-
-# Keep these important files that should be tracked:
-# - Makefile
-# - base/ directory structure
-# - configs/ directory with configuration files
-# - src/ directory if it contains source code (not extracted archives)
-# - prompt.md and README.md
-# - scripts/ directory when created
 
 # Exception patterns (force include certain files/directories)
 !.gitignore
