@@ -77,10 +77,13 @@ help:
 	@echo "  all          Build complete initramfs (default)"
 	@echo "  busybox      Download and build busybox"
 	@echo "  kexec-tools  Download and build kexec-tools"
-	@echo "  initramfs    Assemble final initramfs.cpio.gz"
+	@echo "  initramfs    Assemble final initramfs.cpio.zst"
 	@echo "  clean        Remove build artifacts but keep downloads"
 	@echo "  distclean    Remove everything including downloads"
 	@echo "  help         Show this help message"
+	@echo ""
+	@echo "Optional directories:"
+	@echo "  firmwares/   If present, contents will be copied to /usr/lib/firmware in initramfs"
 	@echo ""
 	@echo "Configuration:"
 	@echo "  TARGET_ARCH=$(TARGET_ARCH)"
@@ -126,6 +129,18 @@ $(INIT_DIR)/.base-copied: | $(BUILD_DIR)
 	@cp -r base/. $(INIT_DIR)/
 	@touch $(INIT_DIR)/.base-copied
 	$(call success,Base files copied)
+
+# Copy firmware files
+$(INIT_DIR)/.firmware-copied: $(INIT_DIR)/.base-copied
+	$(call log,Copying firmware files to initramfs)
+	@if [ -d "firmwares" ]; then \
+		mkdir -p $(INIT_DIR)/usr/lib/firmware; \
+		cp -r firmwares/. $(INIT_DIR)/usr/lib/firmware/; \
+		printf "$(GREEN)[SUCCESS]$(NC) Firmware files copied\n"; \
+	else \
+		printf "$(YELLOW)[WARN]$(NC) No firmwares directory found, skipping firmware installation\n"; \
+	fi
+	@touch $(INIT_DIR)/.firmware-copied
 
 # Download busybox
 $(DOWNLOAD_DIR)/busybox-$(BUSYBOX_VERSION).tar.bz2: | $(BUILD_DIR)
@@ -209,9 +224,9 @@ $(INIT_DIR)/sbin/kexec: $(SRC_DIR)/kexec-tools-$(KEXEC_TOOLS_VERSION)/build/sbin
 kexec-tools: $(INIT_DIR)/sbin/kexec
 
 # Create initramfs archive
-$(BUILD_DIR)/initramfs.cpio.zst: $(INIT_DIR)/bin/busybox $(INIT_DIR)/sbin/kexec
+$(BUILD_DIR)/initramfs.cpio.zst: $(INIT_DIR)/bin/busybox $(INIT_DIR)/sbin/kexec $(INIT_DIR)/.firmware-copied
 	$(call log,Creating initramfs archive with zstd compression)
-	@cd $(INIT_DIR) && find . -name ".base-copied" -prune -o -type f -print -o -type d -print | cpio -o -H newc | zstd -19 > ../initramfs.cpio.zst
+	@cd $(INIT_DIR) && find . -name ".base-copied" -prune -o -name ".firmware-copied" -prune -o -type f -print -o -type d -print | cpio -o -H newc | zstd -19 > ../initramfs.cpio.zst
 	$(call success,Initramfs created at $(BUILD_DIR)/initramfs.cpio.zst)
 
 # Initramfs target
