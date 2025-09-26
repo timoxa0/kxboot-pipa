@@ -39,12 +39,26 @@ RUN apt-get update && apt-get install -y \
     bc \
     # Git for potential source management
     git \
+    # Android boot image tools
+    android-tools-mkbootimg \
     # Utilities
     file \
     findutils \
     # Clean up to reduce image size
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+RUN if [ "$(uname -m)" = "x86_64" ]; then \
+    wget https://go.dev/dl/go1.25.1.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go1.25.1.linux-amd64.tar.gz && \
+    rm go1.25.1.linux-amd64.tar.gz; \
+elif [ "$(uname -m)" = "aarch64" ]; then \
+    wget https://go.dev/dl/go1.25.1.linux-arm64.tar.gz && \
+    tar -C /usr/local -xzf go1.25.1.linux-arm64.tar.gz && \
+    rm go1.25.1.linux-arm64.tar.gz; \
+fi
+
+ENV PATH="/usr/local/go/bin:${PATH}"
 
 # Create a non-root user for building
 RUN groupadd -g 1000 builder && \
