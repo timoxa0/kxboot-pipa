@@ -1,0 +1,23 @@
+# /etc/inittab - busybox init configuration
+#
+# Format: <id>:<runlevels>:<action>:<process>
+#
+# id        - unique identifier (1-4 characters)
+# runlevels - runlevels for which this entry applies (busybox uses 0-6)
+# action    - one of: sysinit, wait, once, respawn, askfirst, ctrlaltdel, shutdown, restart
+# process   - command to execute
+
+::sysinit:/bin/mount -a
+::sysinit:/etc/init.d/load-modules
+::sysinit:/etc/init.d/map-block-devices
+::sysinit:/sbin/sysctl -p /etc/sysctl.d/10-kernel.conf
+
+ttyGS0::respawn:/bin/sh
+tty1::respawn:/bin/sh
+tty2::respawn:/bin/sh
+
+::ctrlaltdel:/sbin/reboot
+::shutdown:/bin/umount -a -r
+::shutdown:/sbin/swapoff -a
+
+::restart:/sbin/init

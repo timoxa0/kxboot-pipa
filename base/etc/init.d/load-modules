@@ -1,0 +1,27 @@
+#!/bin/sh
+MODULES_FILE="/etc/modules"
+
+echo "Loading kernel modules from $MODULES_FILE..."
+
+if [ ! -f "$MODULES_FILE" ]; then
+    echo "Warning: $MODULES_FILE not found"
+    exit 1
+fi
+
+# Read modules file line by line
+while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+        ''|'#'*) continue ;;
+    esac
+    
+    module_name=$(echo "$line" | awk '{print $1}')
+    module_params=$(echo "$line" | cut -d' ' -f2- -s)
+    
+    if [ -n "$module_params" ]; then
+        echo "Loading module: $module_name with parameters: $module_params"
+        modprobe "$module_name" $module_params || echo "Failed to load $module_name"
+    else
+        echo "Loading module: $module_name"
+        modprobe "$module_name" || echo "Failed to load $module_name"
+    fi
+done < "$MODULES_FILE"

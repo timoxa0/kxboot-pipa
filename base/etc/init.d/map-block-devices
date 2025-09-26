@@ -1,0 +1,17 @@
+#!/bin/sh
+
+mkdir -p /dev/disk/by-label
+mkdir -p /dev/disk/by-uuid
+
+for dev in /dev/sd*; do
+    [ -b "$dev" ] || continue
+
+    line=$(blkid "$dev") || continue
+    info=${line#*: }
+
+    LABEL=${info#*LABEL=\"}; LABEL=${LABEL%%\"*}
+    UUID=${info#*UUID=\"}; UUID=${UUID%%\"*}
+
+    [ -n "$LABEL" ] && [ "$LABEL" != "UUID=" ] && ln -sf "$dev" "/dev/disk/by-label/$LABEL"
+    [ -n "$UUID" ] && [ "$UUID" != "UUID=" ] && ln -sf "$dev" "/dev/disk/by-uuid/$UUID"
+done
