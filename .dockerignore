@@ -1,0 +1,34 @@
+# Exclude build artifacts
+build/
+*.cpio.gz
+*.cpio.zst
+
+# Exclude git files
+.git/
+.gitignore
+
+# Exclude IDE files
+.vscode/
+.vscode-ctags
+*.swp
+*.swo
+*~
+
+# Exclude temporary files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# Exclude documentation (if any)
+*.md
+docs/
+
+# Keep base files, configs, scripts, and source
+!base/
+!configs/
+!scripts/
+!src/
+!Makefile
+!Dockerfile
+!.dockerignore
