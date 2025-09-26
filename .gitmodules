@@ -1,0 +1,3 @@
+[submodule "kxmenu"]
+	path = kxmenu
+	url = https://github.com/timoxa0/kxmenu.git
