@@ -84,6 +84,7 @@ help:
 	@echo ""
 	@echo "Optional directories:"
 	@echo "  firmwares/   If present, contents will be copied to /usr/lib/firmware in initramfs"
+	@echo "  modules/     If present, contents will be copied to /usr/lib/modules in initramfs"
 	@echo ""
 	@echo "Configuration:"
 	@echo "  TARGET_ARCH=$(TARGET_ARCH)"
@@ -141,6 +142,18 @@ $(INIT_DIR)/.firmware-copied: $(INIT_DIR)/.base-copied
 		printf "$(YELLOW)[WARN]$(NC) No firmwares directory found, skipping firmware installation\n"; \
 	fi
 	@touch $(INIT_DIR)/.firmware-copied
+
+# Copy modules files
+$(INIT_DIR)/.modules-copied: $(INIT_DIR)/.base-copied
+	$(call log,Copying modules files to initramfs)
+	@if [ -d "modules" ]; then \
+		mkdir -p $(INIT_DIR)/usr/lib/modules; \
+		cp -r modules/. $(INIT_DIR)/usr/lib/modules/; \
+		printf "$(GREEN)[SUCCESS]$(NC) Modules files copied\n"; \
+	else \
+		printf "$(YELLOW)[WARN]$(NC) No modules directory found, skipping modules installation\n"; \
+	fi
+	@touch $(INIT_DIR)/.modules-copied
 
 # Download busybox
 $(DOWNLOAD_DIR)/busybox-$(BUSYBOX_VERSION).tar.bz2: | $(BUILD_DIR)
@@ -224,9 +237,9 @@ $(INIT_DIR)/sbin/kexec: $(SRC_DIR)/kexec-tools-$(KEXEC_TOOLS_VERSION)/build/sbin
 kexec-tools: $(INIT_DIR)/sbin/kexec
 
 # Create initramfs archive
-$(BUILD_DIR)/initramfs.cpio.zst: $(INIT_DIR)/bin/busybox $(INIT_DIR)/sbin/kexec $(INIT_DIR)/.firmware-copied
+$(BUILD_DIR)/initramfs.cpio.zst: $(INIT_DIR)/bin/busybox $(INIT_DIR)/sbin/kexec $(INIT_DIR)/.firmware-copied $(INIT_DIR)/.modules-copied
 	$(call log,Creating initramfs archive with zstd compression)
-	@cd $(INIT_DIR) && find . -name ".base-copied" -prune -o -name ".firmware-copied" -prune -o -type f -print -o -type d -print | cpio -o -H newc | zstd -19 > ../initramfs.cpio.zst
+	@cd $(INIT_DIR) && find . -name ".base-copied" -prune -o -name ".firmware-copied" -prune -o -name ".modules-copied" -prune -o -type f -print -o -type d -print | cpio -o -H newc | zstd -19 > ../initramfs.cpio.zst
 	$(call success,Initramfs created at $(BUILD_DIR)/initramfs.cpio.zst)
 
 # Initramfs target
