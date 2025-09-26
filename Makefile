@@ -239,7 +239,7 @@ kexec-tools: $(INIT_DIR)/sbin/kexec
 # Create initramfs archive
 $(BUILD_DIR)/initramfs.cpio.zst: $(INIT_DIR)/bin/busybox $(INIT_DIR)/sbin/kexec $(INIT_DIR)/.firmware-copied $(INIT_DIR)/.modules-copied
 	$(call log,Creating initramfs archive with zstd compression)
-	@cd $(INIT_DIR) && find . -name ".base-copied" -prune -o -name ".firmware-copied" -prune -o -name ".modules-copied" -prune -o -type f -print -o -type d -print | cpio -o -H newc | zstd -19 > ../initramfs.cpio.zst
+	@cd $(INIT_DIR) && find . | cpio -o -H newc | zstd -19 > ../initramfs.cpio.zst
 	$(call success,Initramfs created at $(BUILD_DIR)/initramfs.cpio.zst)
 
 # Initramfs target
