@@ -77,7 +77,9 @@ help:
 	@echo "  all          Build complete initramfs (default)"
 	@echo "  busybox      Download and build busybox"
 	@echo "  kexec-tools  Download and build kexec-tools"
+	@echo "  kxmenu       Build kxmenu bootloader"
 	@echo "  initramfs    Assemble final initramfs.cpio.zst"
+	@echo "  android-boot Create Android boot image using build/zImage and boot.conf"
 	@echo "  clean        Remove build artifacts but keep downloads"
 	@echo "  distclean    Remove everything including downloads"
 	@echo "  help         Show this help message"
@@ -236,8 +238,29 @@ $(INIT_DIR)/sbin/kexec: $(SRC_DIR)/kexec-tools-$(KEXEC_TOOLS_VERSION)/build/sbin
 .PHONY: kexec-tools
 kexec-tools: $(INIT_DIR)/sbin/kexec
 
+# Build kxmenu
+kxmenu/build/kxmenu: check-cross-tools
+	$(call log,Building kxmenu for $(TARGET_ARCH))
+	@if [ ! -d "kxmenu" ]; then \
+		printf "$(RED)[ERROR]$(NC) kxmenu submodule not found. Please run: git submodule update --init\n"; \
+		exit 1; \
+	fi
+	@$(MAKE) -C kxmenu GOOS=linux GOARCH=arm64 CGO_ENABLED=0 build
+	$(call success,kxmenu built)
+
+# Install kxmenu
+$(INIT_DIR)/sbin/kxmenu: kxmenu/build/kxmenu $(INIT_DIR)/.base-copied
+	$(call log,Installing kxmenu)
+	@mkdir -p $(INIT_DIR)/sbin
+	@cp kxmenu/build/kxmenu $@
+	$(call success,kxmenu installed)
+
+# kxmenu target (convenience alias)
+.PHONY: kxmenu
+kxmenu: $(INIT_DIR)/sbin/kxmenu
+
 # Create initramfs archive
-$(BUILD_DIR)/initramfs.cpio.zst: $(INIT_DIR)/bin/busybox $(INIT_DIR)/sbin/kexec $(INIT_DIR)/.firmware-copied $(INIT_DIR)/.modules-copied
+$(BUILD_DIR)/initramfs.cpio.zst: $(INIT_DIR)/bin/busybox $(INIT_DIR)/sbin/kexec $(INIT_DIR)/sbin/kxmenu $(INIT_DIR)/menu $(INIT_DIR)/.firmware-copied $(INIT_DIR)/.modules-copied
 	$(call log,Creating initramfs archive with zstd compression)
 	@cd $(INIT_DIR) && find . | cpio -o -H newc | zstd -19 > ../initramfs.cpio.zst
 	$(call success,Initramfs created at $(BUILD_DIR)/initramfs.cpio.zst)
@@ -246,11 +269,62 @@ $(BUILD_DIR)/initramfs.cpio.zst: $(INIT_DIR)/bin/busybox $(INIT_DIR)/sbin/kexec 
 .PHONY: initramfs
 initramfs: $(BUILD_DIR)/initramfs.cpio.zst
 
+# Process menu file with BOOT_PART_LABEL replacement
+$(INIT_DIR)/menu: $(INIT_DIR)/.base-copied
+	$(call log,Processing menu file with BOOT_PART_LABEL replacement)
+	@if [ ! -f "boot.conf" ]; then \
+		printf "$(RED)[ERROR]$(NC) boot.conf not found\n"; \
+		exit 1; \
+	fi
+	@BOOT_PART_LABEL=$$(grep "^BOOT_PART_LABEL" boot.conf | cut -d'=' -f2 | tr -d ' '); \
+	sed "s/{{ BOOT_PART_LABEL }}/$$BOOT_PART_LABEL/g" base/menu > $(INIT_DIR)/menu
+	@chmod +x $(INIT_DIR)/menu
+	$(call success,Menu file processed with BOOT_PART_LABEL)
+
+# Android boot image target
+$(BUILD_DIR)/boot.img: $(BUILD_DIR)/initramfs.cpio.zst $(INIT_DIR)/menu
+	$(call log,Creating Android boot image)
+	@if [ ! -f "build/zImage" ]; then \
+		printf "$(RED)[ERROR]$(NC) build/zImage not found. Please provide kernel image.\n"; \
+		exit 1; \
+	fi
+	@if [ ! -f "boot.conf" ]; then \
+		printf "$(RED)[ERROR]$(NC) boot.conf not found\n"; \
+		exit 1; \
+	fi
+	@# Source boot.conf parameters
+	@eval $$(grep "^CMDLINE" boot.conf | tr -d ' ') && \
+	eval $$(grep "^HEADER_VERSION" boot.conf | tr -d ' ') && \
+	eval $$(grep "^KERNEL_OFFSET" boot.conf | tr -d ' ') && \
+	eval $$(grep "^BASE_ADDRESS" boot.conf | tr -d ' ') && \
+	eval $$(grep "^RAMDISK_OFFSET" boot.conf | tr -d ' ') && \
+	eval $$(grep "^SECOND_OFFSET" boot.conf | tr -d ' ') && \
+	eval $$(grep "^TAGS_OFFSET" boot.conf | tr -d ' ') && \
+	eval $$(grep "^PAGE_SIZE" boot.conf | tr -d ' ') && \
+	mkbootimg \
+		--kernel build/zImage \
+		--ramdisk $(BUILD_DIR)/initramfs.cpio.zst \
+		--cmdline "$$CMDLINE" \
+		--base $$BASE_ADDRESS \
+		--kernel_offset $$KERNEL_OFFSET \
+		--ramdisk_offset $$RAMDISK_OFFSET \
+		--second_offset $$SECOND_OFFSET \
+		--tags_offset $$TAGS_OFFSET \
+		--pagesize $$PAGE_SIZE \
+		--header_version $$HEADER_VERSION \
+		--output $@
+	$(call success,Android boot image created at $(BUILD_DIR)/boot.img)
+
+# Android boot target (convenience alias)
+.PHONY: android-boot
+android-boot: $(BUILD_DIR)/boot.img
+
 # Clean target
 .PHONY: clean
 clean:
 	$(call log,Cleaning build artifacts)
-	@rm -rf $(BUILD_DIR)/initramfs $(BUILD_DIR)/src $(BUILD_DIR)/*.cpio.gz $(BUILD_DIR)/*.cpio.zst
+	@rm -rf $(BUILD_DIR)/initramfs $(BUILD_DIR)/src $(BUILD_DIR)/*.cpio.gz $(BUILD_DIR)/*.cpio.zst $(BUILD_DIR)/*.img
+	@if [ -d "kxmenu" ]; then $(MAKE) -C kxmenu clean 2>/dev/null || true; fi
 	$(call success,Build artifacts cleaned)
 
 # Distclean target

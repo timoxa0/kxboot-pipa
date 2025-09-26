@@ -1,0 +1,5 @@
+#!/bin/sh
+
+mount "/dev/disk/by-label/{{ BOOT_PART_LABEL }}" /mnt
+setfont /etc/kxboot/fonts/ter-132n.psf.gz
+kxmenu menu /mnt/

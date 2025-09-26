@@ -11,10 +11,11 @@
 ::sysinit:/etc/init.d/load-modules
 ::sysinit:/etc/init.d/map-block-devices
 ::sysinit:/sbin/sysctl -p /etc/sysctl.d/10-kernel.conf
+::sysinit:/usr/bin/chvt 2
 
 ttyGS0::respawn:/bin/sh
-tty1::respawn:/bin/sh
-tty2::respawn:/bin/sh
+tty2::respawn:/menu
+tty3::respawn:/bin/sh
 
 ::ctrlaltdel:/sbin/reboot
 ::shutdown:/bin/umount -a -r
