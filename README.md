@@ -1,0 +1,1 @@
+# kxboot - kexec-based boot manager
