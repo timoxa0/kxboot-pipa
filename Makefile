@@ -249,17 +249,12 @@ $(BUILD_DIR)/initramfs.cpio.zst: $(INIT_DIR)/bin/busybox $(INIT_DIR)/sbin/kexec 
 .PHONY: initramfs
 initramfs: $(BUILD_DIR)/initramfs.cpio.zst
 
-# Process menu file with BOOT_PART_LABEL replacement
+# Copy menu file
 $(INIT_DIR)/menu: $(INIT_DIR)/.base-copied
-	$(call log,Processing menu file with BOOT_PART_LABEL replacement)
-	@if [ ! -f "boot.conf" ]; then \
-		printf "$(RED)[ERROR]$(NC) boot.conf not found\n"; \
-		exit 1; \
-	fi
-	@BOOT_PART_LABEL=$$(grep "^BOOT_PART_LABEL" boot.conf | cut -d'=' -f2 | tr -d ' '); \
-	sed "s/{{ BOOT_PART_LABEL }}/$$BOOT_PART_LABEL/g" base/menu > $(INIT_DIR)/menu
+	$(call log,Copying menu file)
+	@cp base/menu $(INIT_DIR)/menu
 	@chmod +x $(INIT_DIR)/menu
-	$(call success,Menu file processed with BOOT_PART_LABEL)
+	$(call success,Menu file copied)
 
 # Android boot image target
 $(BUILD_DIR)/boot.img: $(BUILD_DIR)/initramfs.cpio.zst $(INIT_DIR)/menu

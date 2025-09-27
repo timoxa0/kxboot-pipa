@@ -1,5 +1,13 @@
 #!/bin/sh
 
-mount "/dev/disk/by-label/{{ BOOT_PART_LABEL }}" /mnt
+# Parse BOOT_PART_LABEL from kernel command line (kxmenu.boot parameter)
+BOOT_PART_LABEL=$(grep -o 'kxmenu\.boot=[^ ]*' /proc/cmdline | cut -d'=' -f2)
+
+# Fallback to default if not found
+if [ -z "$BOOT_PART_LABEL" ]; then
+    BOOT_PART_LABEL="boot"
+fi
+
+mount "/dev/disk/by-label/$BOOT_PART_LABEL" /mnt
 setfont /etc/kxboot/fonts/ter-132n.psf.gz
 kxmenu menu /mnt/
