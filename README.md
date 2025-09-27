@@ -1,1 +1,1 @@
-# kxboot - kexec-based boot manager
+# kxboot - kexec-based boot manager for Xiaomi Pad 6
