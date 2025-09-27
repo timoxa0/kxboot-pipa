@@ -8,7 +8,6 @@ HOST_ARCH := $(shell uname -m)
 # Directories
 BUILD_DIR := build
 INIT_DIR := $(BUILD_DIR)/initramfs
-SRC_DIR := $(BUILD_DIR)/src
 DOWNLOAD_DIR := $(BUILD_DIR)/downloads
 
 # Submodule directories
@@ -84,9 +83,9 @@ help:
 	@echo "  clean        Remove build artifacts but keep downloads"
 	@echo "  help         Show this help message"
 	@echo ""
-	@echo "Optional directories:"
-	@echo "  firmwares/   If present, contents will be copied to /usr/lib/firmware in initramfs"
-	@echo "  modules/     If present, contents will be copied to /usr/lib/modules in initramfs"
+	@echo "Package extraction:"
+	@echo "  Firmware and modules are automatically extracted from RPM packages"
+	@echo "  configured in boot.conf during the build process"
 	@echo ""
 	@echo "Configuration:"
 	@echo "  TARGET_ARCH=$(TARGET_ARCH)"
@@ -117,7 +116,6 @@ $(BUILD_DIR):
 	$(call log,Creating build directories)
 	@mkdir -p $(BUILD_DIR)
 	@mkdir -p $(INIT_DIR)
-	@mkdir -p $(SRC_DIR)
 	@mkdir -p $(DOWNLOAD_DIR)
 	$(call success,Build directories created)
 
@@ -134,28 +132,20 @@ $(INIT_DIR)/.base-copied: | $(BUILD_DIR)
 	$(call success,Base files copied)
 
 # Copy firmware files
-$(INIT_DIR)/.firmware-copied: $(INIT_DIR)/.base-copied
-	$(call log,Copying firmware files to initramfs)
-	@if [ -d "firmwares" ]; then \
-		mkdir -p $(INIT_DIR)/usr/lib/firmware; \
-		cp -r firmwares/. $(INIT_DIR)/usr/lib/firmware/; \
-		printf "$(GREEN)[SUCCESS]$(NC) Firmware files copied\n"; \
-	else \
-		printf "$(YELLOW)[WARN]$(NC) No firmwares directory found, skipping firmware installation\n"; \
-	fi
+$(INIT_DIR)/.firmware-copied: $(DOWNLOAD_DIR)/firmware.rpm $(INIT_DIR)/.base-copied
+	$(call log,Extracting firmware files to initramfs)
+	@mkdir -p $(INIT_DIR)/usr/lib
+	@cd $(INIT_DIR) && rpm2cpio ../../$(DOWNLOAD_DIR)/firmware.rpm | cpio -idmv "./usr/lib/firmware/*"
 	@touch $(INIT_DIR)/.firmware-copied
+	$(call success,Firmware files extracted)
 
 # Copy modules files
-$(INIT_DIR)/.modules-copied: $(INIT_DIR)/.base-copied
-	$(call log,Copying modules files to initramfs)
-	@if [ -d "modules" ]; then \
-		mkdir -p $(INIT_DIR)/usr/lib/modules; \
-		cp -r modules/. $(INIT_DIR)/usr/lib/modules/; \
-		printf "$(GREEN)[SUCCESS]$(NC) Modules files copied\n"; \
-	else \
-		printf "$(YELLOW)[WARN]$(NC) No modules directory found, skipping modules installation\n"; \
-	fi
+$(INIT_DIR)/.modules-copied: $(DOWNLOAD_DIR)/kernel.rpm $(INIT_DIR)/.base-copied
+	$(call log,Extracting modules files to initramfs)
+	@mkdir -p $(INIT_DIR)/usr/lib
+	@cd $(INIT_DIR) && rpm2cpio ../../$(DOWNLOAD_DIR)/kernel.rpm | cpio -idmv "./usr/lib/modules/*"
 	@touch $(INIT_DIR)/.modules-copied
+	$(call success,Modules files extracted)
 
 # Initialize busybox submodule
 $(BUSYBOX_DIR)/.git:
@@ -262,12 +252,8 @@ $(INIT_DIR)/menu: $(INIT_DIR)/.base-copied
 	$(call success,Menu file copied)
 
 # Android boot image target
-$(BUILD_DIR)/boot.img: $(BUILD_DIR)/initramfs.cpio.zst $(INIT_DIR)/menu
+$(BUILD_DIR)/boot.img: $(BUILD_DIR)/initramfs.cpio.zst $(INIT_DIR)/menu $(BUILD_DIR)/zImage
 	$(call log,Creating Android boot image)
-	@if [ ! -f "build/zImage" ]; then \
-		printf "$(RED)[ERROR]$(NC) build/zImage not found. Please provide kernel image.\n"; \
-		exit 1; \
-	fi
 	@if [ ! -f "boot.conf" ]; then \
 		printf "$(RED)[ERROR]$(NC) boot.conf not found\n"; \
 		exit 1; \
@@ -294,7 +280,7 @@ android-boot: $(BUILD_DIR)/boot.img
 .PHONY: clean
 clean:
 	$(call log,Cleaning build artifacts)
-	@rm -rf $(BUILD_DIR)/initramfs $(BUILD_DIR)/src $(BUILD_DIR)/*.cpio.gz $(BUILD_DIR)/*.cpio.zst $(BUILD_DIR)/*.img
+	@rm -rf $(BUILD_DIR) || true;
 	@if [ -d "kxmenu" ]; then $(MAKE) -C kxmenu clean 2>/dev/null || true; fi
 	@if [ -d "$(BUSYBOX_DIR)" ]; then $(MAKE) -C $(BUSYBOX_DIR) clean 2>/dev/null || true; fi
 	@if [ -d "$(KEXEC_TOOLS_DIR)" ]; then $(MAKE) -C $(KEXEC_TOOLS_DIR) clean 2>/dev/null || true; fi
@@ -313,3 +299,32 @@ info:
 	@echo "  Kexec-tools submodule: $(KEXEC_TOOLS_DIR)"
 	@echo "  Build directory: $(BUILD_DIR)"
 	@echo "  Initramfs directory: $(INIT_DIR)"
+
+# Download kernel RPM
+$(DOWNLOAD_DIR)/kernel.rpm: | $(BUILD_DIR)
+	$(call log,Downloading kernel package)
+	@wget -O $@ $(KERNEL_PACKAGE_URL) || curl -L -o $@ $(KERNEL_PACKAGE_URL)
+	$(call success,Kernel package downloaded)
+
+# Download firmware RPM
+$(DOWNLOAD_DIR)/firmware.rpm: | $(BUILD_DIR)
+	$(call log,Downloading firmware package)
+	@wget -O $@ $(FIRMWARE_PACKAGE_URL) || curl -L -o $@ $(FIRMWARE_PACKAGE_URL)
+	$(call success,Firmware package downloaded)
+
+# Create zImage from kernel and devicetree
+$(BUILD_DIR)/zImage: $(DOWNLOAD_DIR)/kernel.rpm | $(BUILD_DIR)
+	$(call log,Extracting kernel and creating zImage)
+	@mkdir -p $(BUILD_DIR)/temp-kernel
+	@cd $(BUILD_DIR)/temp-kernel && rpm2cpio ../../$(DOWNLOAD_DIR)/kernel.rpm | cpio -idmv 2> /dev/null
+	@KERNEL_NAME=$$(find $(BUILD_DIR)/temp-kernel/ -name "vmlinuz" -type f | head -1 | xargs dirname | xargs basename); \
+	printf "$(BLUE)[INFO]$(NC) %s\n" "Using kernel: $$KERNEL_NAME"; \
+	cat $(BUILD_DIR)/temp-kernel/usr/lib/modules/$$KERNEL_NAME/vmlinuz $(BUILD_DIR)/temp-kernel/usr/lib/modules/$$KERNEL_NAME/devicetree > $@
+	@rm -rf $(BUILD_DIR)/temp-kernel
+	$(call success,zImage created)
+
+# Convenience targets
+.PHONY: kernel-rpm firmware-rpm zImage
+kernel-rpm: $(DOWNLOAD_DIR)/kernel.rpm
+firmware-rpm: $(DOWNLOAD_DIR)/firmware.rpm
+zImage: $(BUILD_DIR)/zImage

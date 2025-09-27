@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y \
     tar \
     bzip2 \
     xz-utils \
+    rpm2cpio \
     # Compression tools
     zstd \
     gzip \
