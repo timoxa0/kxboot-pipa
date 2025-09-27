@@ -1,5 +1,7 @@
 #!/bin/sh
 
+setfont /etc/kxboot/fonts/ter-132n.psf.gz
+
 # Parse BOOT_PART_LABEL from kernel command line (kxmenu.boot parameter)
 BOOT_PART_LABEL=$(grep -o 'kxmenu\.boot=[^ ]*' /proc/cmdline | cut -d'=' -f2)
 
@@ -8,6 +10,12 @@ if [ -z "$BOOT_PART_LABEL" ]; then
     BOOT_PART_LABEL="boot"
 fi
 
-mount "/dev/disk/by-label/$BOOT_PART_LABEL" /mnt
-setfont /etc/kxboot/fonts/ter-132n.psf.gz
-kxmenu menu /mnt/
+{ 
+    mount "/dev/disk/by-label/$BOOT_PART_LABEL" /mnt
+    kxmenu menu /mnt/
+} || {
+    echo "Boot failded! Press Enter to reboot..."
+    echo "Serial console open on USB"
+    read -r
+    reboot
+}
