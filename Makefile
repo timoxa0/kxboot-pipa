@@ -11,13 +11,9 @@ INIT_DIR := $(BUILD_DIR)/initramfs
 SRC_DIR := $(BUILD_DIR)/src
 DOWNLOAD_DIR := $(BUILD_DIR)/downloads
 
-# Versions (can be overridden)
-BUSYBOX_VERSION := 1.36.1
-KEXEC_TOOLS_VERSION := 2.0.27
-
-# URLs
-BUSYBOX_URL := https://busybox.net/downloads/busybox-$(BUSYBOX_VERSION).tar.bz2
-KEXEC_TOOLS_URL := https://www.kernel.org/pub/linux/utils/kernel/kexec/kexec-tools-$(KEXEC_TOOLS_VERSION).tar.xz
+# Submodule directories
+BUSYBOX_DIR := busybox
+KEXEC_TOOLS_DIR := kexec-tools
 
 # Cross-compilation setup
 ifeq ($(HOST_ARCH),aarch64)
@@ -81,7 +77,6 @@ help:
 	@echo "  initramfs    Assemble final initramfs.cpio.zst"
 	@echo "  android-boot Create Android boot image using build/zImage and boot.conf"
 	@echo "  clean        Remove build artifacts but keep downloads"
-	@echo "  distclean    Remove everything including downloads"
 	@echo "  help         Show this help message"
 	@echo ""
 	@echo "Optional directories:"
@@ -94,9 +89,9 @@ help:
 	@echo "  NEED_CROSS_COMPILE=$(NEED_CROSS_COMPILE)"
 	@echo "  CROSS_COMPILE=$(CROSS_COMPILE)"
 	@echo ""
-	@echo "Versions:"
-	@echo "  BUSYBOX_VERSION=$(BUSYBOX_VERSION)"
-	@echo "  KEXEC_TOOLS_VERSION=$(KEXEC_TOOLS_VERSION)"
+	@echo "Submodules:"
+	@echo "  busybox/         Busybox utilities (submodule)"
+	@echo "  kexec-tools/     Kexec tools for kernel switching (submodule)"
 
 # Check cross-compilation tools
 .PHONY: check-cross-tools
@@ -157,77 +152,62 @@ $(INIT_DIR)/.modules-copied: $(INIT_DIR)/.base-copied
 	fi
 	@touch $(INIT_DIR)/.modules-copied
 
-# Download busybox
-$(DOWNLOAD_DIR)/busybox-$(BUSYBOX_VERSION).tar.bz2: | $(BUILD_DIR)
-	$(call log,Downloading busybox $(BUSYBOX_VERSION))
-	@wget -O $@ $(BUSYBOX_URL) || curl -L -o $@ $(BUSYBOX_URL)
-	$(call success,Busybox downloaded)
-
-# Extract busybox
-$(SRC_DIR)/busybox-$(BUSYBOX_VERSION)/Makefile: $(DOWNLOAD_DIR)/busybox-$(BUSYBOX_VERSION).tar.bz2 | $(BUILD_DIR)
-	$(call log,Extracting busybox)
-	@mkdir -p $(SRC_DIR)
-	@tar -xf $< -C $(SRC_DIR)
-	@touch $@
-	$(call success,Busybox extracted)
+# Initialize busybox submodule
+$(BUSYBOX_DIR)/.git:
+	$(call log,Initializing busybox submodule)
+	@git submodule update --init $(BUSYBOX_DIR)
+	$(call success,Busybox submodule initialized)
 
 # Configure busybox
-$(SRC_DIR)/busybox-$(BUSYBOX_VERSION)/.config: $(SRC_DIR)/busybox-$(BUSYBOX_VERSION)/Makefile
+$(BUSYBOX_DIR)/.config: $(BUSYBOX_DIR)/.git
 	$(call log,Configuring busybox)
 	@if [ -f "configs/busybox.config" ]; then \
 		cp configs/busybox.config $@; \
 	else \
 		$(call warn,No busybox config found, using defconfig); \
-		$(MAKE) -C $(SRC_DIR)/busybox-$(BUSYBOX_VERSION) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) defconfig; \
+		$(MAKE) -C $(BUSYBOX_DIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) defconfig; \
 	fi
 	$(call success,Busybox configured)
 
 # Build busybox
-$(SRC_DIR)/busybox-$(BUSYBOX_VERSION)/busybox: $(SRC_DIR)/busybox-$(BUSYBOX_VERSION)/.config
+$(BUSYBOX_DIR)/busybox: $(BUSYBOX_DIR)/.config
 	$(call log,Building busybox)
-	@$(MAKE) -C $(SRC_DIR)/busybox-$(BUSYBOX_VERSION) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -j$(shell nproc)
+	@$(MAKE) -C $(BUSYBOX_DIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -j$(shell nproc)
 	$(call success,Busybox built)
 
 # Install busybox
-$(INIT_DIR)/bin/busybox: $(SRC_DIR)/busybox-$(BUSYBOX_VERSION)/busybox $(INIT_DIR)/.base-copied check-cross-tools
+$(INIT_DIR)/bin/busybox: $(BUSYBOX_DIR)/busybox $(INIT_DIR)/.base-copied check-cross-tools
 	$(call log,Installing busybox)
-	@$(MAKE) -C $(SRC_DIR)/busybox-$(BUSYBOX_VERSION) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) CONFIG_PREFIX=$(abspath $(INIT_DIR)) install
+	@$(MAKE) -C $(BUSYBOX_DIR) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) CONFIG_PREFIX=$(abspath $(INIT_DIR)) install
 	$(call success,Busybox installed)
 
 # Busybox target (convenience alias)
 .PHONY: busybox
 busybox: $(INIT_DIR)/bin/busybox
 
-# Download kexec-tools
-$(DOWNLOAD_DIR)/kexec-tools-$(KEXEC_TOOLS_VERSION).tar.xz: | $(BUILD_DIR)
-	$(call log,Downloading kexec-tools $(KEXEC_TOOLS_VERSION))
-	@wget -O $@ $(KEXEC_TOOLS_URL) || curl -L -o $@ $(KEXEC_TOOLS_URL)
-	$(call success,Kexec-tools downloaded)
-
-# Extract kexec-tools
-$(SRC_DIR)/kexec-tools-$(KEXEC_TOOLS_VERSION)/configure: $(DOWNLOAD_DIR)/kexec-tools-$(KEXEC_TOOLS_VERSION).tar.xz | $(BUILD_DIR)
-	$(call log,Extracting kexec-tools)
-	@mkdir -p $(SRC_DIR)
-	@tar -xf $< -C $(SRC_DIR)
-	@touch $@
-	$(call success,Kexec-tools extracted)
+# Initialize kexec-tools submodule
+$(KEXEC_TOOLS_DIR)/.git:
+	$(call log,Initializing kexec-tools submodule)
+	@git submodule update --init $(KEXEC_TOOLS_DIR)
+	$(call success,Kexec-tools submodule initialized)
 
 # Configure kexec-tools
-$(SRC_DIR)/kexec-tools-$(KEXEC_TOOLS_VERSION)/Makefile: $(SRC_DIR)/kexec-tools-$(KEXEC_TOOLS_VERSION)/configure
+$(KEXEC_TOOLS_DIR)/Makefile: $(KEXEC_TOOLS_DIR)/.git
 	$(call log,Configuring kexec-tools)
-	@cd $(SRC_DIR)/kexec-tools-$(KEXEC_TOOLS_VERSION) && \
+	@cd $(KEXEC_TOOLS_DIR) && \
+	if [ ! -f configure ]; then ./bootstrap; fi && \
 	CC="$(CC)" CXX="$(CXX)" AR="$(AR)" STRIP="$(STRIP)" BUILD_CFLAGS="-O2 -Wall" LDFLAGS="-static" \
 		./configure --host=$(CROSS_COMPILE:%-=%) --build=$(HOST_ARCH)
 	$(call success,Kexec-tools configured)
 
 # Build kexec-tools
-$(SRC_DIR)/kexec-tools-$(KEXEC_TOOLS_VERSION)/build/sbin/kexec: $(SRC_DIR)/kexec-tools-$(KEXEC_TOOLS_VERSION)/Makefile
+$(KEXEC_TOOLS_DIR)/build/sbin/kexec: $(KEXEC_TOOLS_DIR)/Makefile
 	$(call log,Building kexec-tools)
-	@$(MAKE) -C $(SRC_DIR)/kexec-tools-$(KEXEC_TOOLS_VERSION) -j$(shell nproc)
+	@$(MAKE) -C $(KEXEC_TOOLS_DIR) -j$(shell nproc)
 	$(call success,Kexec-tools built)
 
 # Install kexec-tools
-$(INIT_DIR)/sbin/kexec: $(SRC_DIR)/kexec-tools-$(KEXEC_TOOLS_VERSION)/build/sbin/kexec $(INIT_DIR)/.base-copied check-cross-tools
+$(INIT_DIR)/sbin/kexec: $(KEXEC_TOOLS_DIR)/build/sbin/kexec $(INIT_DIR)/.base-copied check-cross-tools
 	$(call log,Installing kexec-tools)
 	@mkdir -p $(INIT_DIR)/sbin
 	@cp $< $@
@@ -325,14 +305,9 @@ clean:
 	$(call log,Cleaning build artifacts)
 	@rm -rf $(BUILD_DIR)/initramfs $(BUILD_DIR)/src $(BUILD_DIR)/*.cpio.gz $(BUILD_DIR)/*.cpio.zst $(BUILD_DIR)/*.img
 	@if [ -d "kxmenu" ]; then $(MAKE) -C kxmenu clean 2>/dev/null || true; fi
+	@if [ -d "$(BUSYBOX_DIR)" ]; then $(MAKE) -C $(BUSYBOX_DIR) clean 2>/dev/null || true; fi
+	@if [ -d "$(KEXEC_TOOLS_DIR)" ]; then $(MAKE) -C $(KEXEC_TOOLS_DIR) clean 2>/dev/null || true; fi
 	$(call success,Build artifacts cleaned)
-
-# Distclean target
-.PHONY: distclean
-distclean:
-	$(call log,Cleaning everything including downloads)
-	@rm -rf $(BUILD_DIR)
-	$(call success,Everything cleaned)
 
 # Show build info
 .PHONY: info
@@ -343,7 +318,7 @@ info:
 	@echo "  Host Architecture: $(HOST_ARCH)"
 	@echo "  Cross-compile needed: $(NEED_CROSS_COMPILE)"
 	@echo "  Cross-compiler: $(CROSS_COMPILE)"
-	@echo "  Busybox version: $(BUSYBOX_VERSION)"
-	@echo "  Kexec-tools version: $(KEXEC_TOOLS_VERSION)"
+	@echo "  Busybox submodule: $(BUSYBOX_DIR)"
+	@echo "  Kexec-tools submodule: $(KEXEC_TOOLS_DIR)"
 	@echo "  Build directory: $(BUILD_DIR)"
 	@echo "  Initramfs directory: $(INIT_DIR)"
