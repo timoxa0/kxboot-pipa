@@ -34,6 +34,11 @@ ARCH := arm64
 # Export variables for sub-makes
 export CC CXX AR STRIP ARCH CROSS_COMPILE
 
+# Import boot configuration if it exists
+ifneq ($(wildcard boot.conf),)
+    include boot.conf
+endif
+
 # Colors for output
 RED := \033[0;31m
 GREEN := \033[0;32m
@@ -267,26 +272,17 @@ $(BUILD_DIR)/boot.img: $(BUILD_DIR)/initramfs.cpio.zst $(INIT_DIR)/menu
 		printf "$(RED)[ERROR]$(NC) boot.conf not found\n"; \
 		exit 1; \
 	fi
-	@# Source boot.conf parameters
-	@eval $$(grep "^CMDLINE" boot.conf | tr -d ' ') && \
-	eval $$(grep "^HEADER_VERSION" boot.conf | tr -d ' ') && \
-	eval $$(grep "^KERNEL_OFFSET" boot.conf | tr -d ' ') && \
-	eval $$(grep "^BASE_ADDRESS" boot.conf | tr -d ' ') && \
-	eval $$(grep "^RAMDISK_OFFSET" boot.conf | tr -d ' ') && \
-	eval $$(grep "^SECOND_OFFSET" boot.conf | tr -d ' ') && \
-	eval $$(grep "^TAGS_OFFSET" boot.conf | tr -d ' ') && \
-	eval $$(grep "^PAGE_SIZE" boot.conf | tr -d ' ') && \
-	mkbootimg \
+	@mkbootimg \
 		--kernel build/zImage \
 		--ramdisk $(BUILD_DIR)/initramfs.cpio.zst \
-		--cmdline "$$CMDLINE" \
-		--base $$BASE_ADDRESS \
-		--kernel_offset $$KERNEL_OFFSET \
-		--ramdisk_offset $$RAMDISK_OFFSET \
-		--second_offset $$SECOND_OFFSET \
-		--tags_offset $$TAGS_OFFSET \
-		--pagesize $$PAGE_SIZE \
-		--header_version $$HEADER_VERSION \
+		--cmdline "$(CMDLINE)" \
+		--base $(BASE_ADDRESS) \
+		--kernel_offset $(KERNEL_OFFSET) \
+		--ramdisk_offset $(RAMDISK_OFFSET) \
+		--second_offset $(SECOND_OFFSET) \
+		--tags_offset $(TAGS_OFFSET) \
+		--pagesize $(PAGE_SIZE) \
+		--header_version $(HEADER_VERSION) \
 		--output $@
 	$(call success,Android boot image created at $(BUILD_DIR)/boot.img)
 
