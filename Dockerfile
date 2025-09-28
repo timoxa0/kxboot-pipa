@@ -69,8 +69,11 @@ RUN groupadd -g 1000 builder && \
 # Set up working directory
 WORKDIR /workspace
 
+# Copy the current directory contents into the container at /workspace
+COPY . .
+
 # Change ownership of the workspace to the builder user
-RUN chown builder:builder /workspace
+RUN chown builder:builder /workspace -R
 
 # Switch to the builder user
 USER builder
