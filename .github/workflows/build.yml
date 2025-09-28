@@ -34,7 +34,7 @@ jobs:
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: kxboot-pipa.img
-        asset_name: kxboot-pipa
+        asset_name: kxboot-pipa.img
         tag: v1.0.0
         overwrite: true
         body: 'kxboot-pipa'
