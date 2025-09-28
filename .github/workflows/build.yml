@@ -1,0 +1,38 @@
+name: Build kxboot-pipa
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Build Docker image
+      run: docker build -t kxboot-image -f ./Dockerfile .
+
+    - name: Run build
+      run: docker run --name kxboot-container kxboot-image make -j$(nproc) android-boot
+    
+    - name: Copy build artifacts
+      run: docker cp kxboot-container:/workspace/build/boot.img ./kxboot-pipa.img
+    
+    - uses: actions/upload-artifact@v4
+      with:
+        name: kxboot-pipa
+        path: kxboot-pipa.img
+    
+    - uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: kxboot-pipa.img
+        asset_name: kxboot-pipa
+        tag: v1.0.0
+        overwrite: true
+        body: 'kxboot-pipa'
